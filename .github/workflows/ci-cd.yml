@@ -1,0 +1,114 @@
+name: CI-CD Test
+
+on:
+  push:
+  #   branches: [ "main" ]
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      logLevel:
+        description: 'Log level'
+        required: true
+        default: 'warning'
+        type: choice
+        options:
+        - info
+        - warning
+        - debug
+      tags:
+        description: 'Test scenario tags'
+        required: false
+        type: boolean
+      environment:
+        description: 'Environment to run tests against'
+        type: environment
+        required: true
+
+env:
+  TEST_ENV: test
+  AWS_REGION: ${{ vars.PROD_AWS_REGION || 'us-east-1' }}
+
+
+jobs:
+  build_image:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Set release version as tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          echo $GITHUB_REF | grep -oP 'refs/tags/\K.*' | sed 's/^/RELEASE_VERSION=/' >> $GITHUB_ENV
+
+      - name: Set commit hash as tag
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        run: |
+          GIT_HASH=$(git ls-remote https://github.com/s-a-tanjim/pipelines)
+          echo RELEASE_VERSION=${GIT_HASH:0:7} >> $GITHUB_ENV
+
+      - name: Build Docker Image
+        env:
+          IMAGE_TAG: ${{ env.RELEASE_VERSION }}
+        run: |
+          docker build --file Dockerfile -t $IMAGE_TAG .
+          docker save -o /tmp/$IMAGE_TAG.tar $IMAGE_TAG
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ env.RELEASE_VERSION }}
+          path: /tmp/${{ env.RELEASE_VERSION }}.tar
+          retention-days: 1
+    outputs:
+      RELEASE_VERSION: ${{ env.RELEASE_VERSION }}
+      TEST_ENV: ${{ env.TEST_ENV }}
+      AWS_REGION: ${{ env.AWS_REGION }}
+
+  test_env_job:
+    name: Test Env Job
+    runs-on: ubuntu-latest
+    needs: build_image
+    environment:
+      name: "Development"
+      url: github.com
+
+    steps:
+      - name: Echo
+        run: echo This is test
+
+
+  dev_ecr_publish:
+    name: Publish Image to Dev ECR
+    needs: build_image
+    # if: github.event_name == 'workflow_dispatch'
+    uses: ./.github/workflows/ecr.yml
+    with:
+      build_env: Development
+      AWS_REGION: ${{ needs.build_image.outputs.AWS_REGION }}
+      ROLE_ARN: ${{ vars.DEV_ROLE_ARN }}
+      IMAGE_TAG: ${{ needs.build_image.outputs.RELEASE_VERSION }}
+      REPOSITORY: ${{ needs.build_image.outputs.TEST_ENV }}
+
+  stage_ecr_publish:
+    needs: build_image
+    if: ${{ (startsWith(github.ref, 'refs/tags/v')) && (vars.STAGE_ROLE_ARN != '') }}
+    uses: ./.github/workflows/ecr.yml
+    with:
+      build_env: stage
+      AWS_REGION: ${{ needs.build_image.outputs.AWS_REGION }}
+      ROLE_ARN: ${{ vars.STAGE_ROLE_ARN }}
+      IMAGE_TAG: ${{ needs.build_image.outputs.RELEASE_VERSION }}
+      REPOSITORY: ${{ needs.build_image.outputs.TEST_ENV }}
+  
+  prod_ecr_publish:
+    needs: build_image
+    if: ${{ (startsWith(github.ref, 'refs/tags/v')) && (vars.PROD_ROLE_ARN != '') }}
+    uses: ./.github/workflows/ecr.yml
+    with:
+      build_env: prod
+      AWS_REGION: ${{ needs.build_image.outputs.AWS_REGION }}
+      ROLE_ARN: ${{ vars.PROD_ROLE_ARN }}
+      IMAGE_TAG: ${{ needs.build_image.outputs.RELEASE_VERSION }}
+      REPOSITORY: ${{ needs.build_image.outputs.TEST_ENV }}

@@ -1,0 +1,46 @@
+# This workflow will be triggered by an external file.
+# This workflow is used to upload the build image to ECR
+name: No, Not this one.
+
+on:
+  workflow_call:
+    inputs:
+      IMAGE_TAG:
+        description: Tag of build image
+        required: true
+        type: string
+      build_env:
+        description: Build Environment
+        required: true
+        type: string
+      AWS_REGION:
+        description: AWS Region where image will be pushed
+        type: string
+        required: true
+      ROLE_ARN:
+        description: AWS Role ARN
+        required: true
+        type: string
+      REPOSITORY:
+        description: ECR Repository name where image will be pushed
+        required: true
+        type: string
+
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ inputs.build_env }}
+      
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: ${{ inputs.IMAGE_TAG }}
+          path: /tmp
+
+      - name: Download Complete!
+        run: |
+          echo "DownloadComplete!"
+
