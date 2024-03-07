@@ -1,0 +1,26 @@
+name: "2.yml"
+
+on:
+  workflow_call:
+    inputs:
+      VAL_IN_2:
+        description: 2nd value
+        required: true
+        type: string
+    outputs:
+      VAL_OUT_2:
+        description: Output of 2nd val
+        value: ${{ jobs.steps.push_to_ecr.outputs.IMAGE_TAG }}
+  
+jobs:
+  second_child_job:
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Running from 2nd child"
+        id: child-2-output
+        run: |
+          echo ${{ inputs.VAL_IN_2 }}
+          echo "val_out2=${{ inputs.VAL_IN_2 }}" >> $GITHUB_OUTPUT
+
+    outputs:
+      OUTPUT_VALUE: ${{ steps.child-2-output.outputs.val_out2 }}

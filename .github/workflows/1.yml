@@ -1,0 +1,23 @@
+name: Parent
+
+on:
+  workflow_dispatch:
+    inputs:
+      inp:
+        description: testInput
+        default: inp
+        required: false
+
+
+env:
+  ENV_TEST: testDataFromEnv
+
+jobs:
+  first_job:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Initial Step
+        run: echo "Hello this is 1st job"
+
+  # second_job:
+    

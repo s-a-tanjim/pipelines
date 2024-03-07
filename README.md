@@ -2,5 +2,5 @@
 
 ## Testing
 - What if "Environment" is deleted?
-> Workflow doesn't fail.
+> Workflow doesn't fail. It recreates the environment.
 
